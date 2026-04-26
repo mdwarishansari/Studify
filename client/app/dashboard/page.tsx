@@ -2,6 +2,8 @@
 
 import { useUser, useAuth, SignOutButton, RedirectToSignIn } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
+import { useSyncUser } from "@/hooks/useSyncUser";
+import { getMyProfile } from "@/lib/api";
 
 interface MongoUser {
   _id: string;
@@ -16,28 +18,19 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 export default function DashboardPage() {
   const { isSignedIn, isLoaded, user: clerkUser } = useUser();
   const { getToken } = useAuth();
+  const { synced } = useSyncUser();
   const [mongoUser, setMongoUser] = useState<MongoUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded || !isSignedIn || !synced) return;
 
     const init = async () => {
       try {
         const token = await getToken();
         if (!token) return;
 
-        // Sync user with backend (creates DB record if needed)
-        await fetch(`${API}/users/sync`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        // Fetch MongoDB profile
-        const res = await fetch(`${API}/users/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const json = await res.json();
+        const json = await getMyProfile(token);
         if (json.success) setMongoUser(json.data);
       } catch (err) {
         console.error("[dashboard]", err);
@@ -47,7 +40,7 @@ export default function DashboardPage() {
     };
 
     init();
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, synced, getToken]);
 
   // Redirect if not signed in
   if (isLoaded && !isSignedIn) return <RedirectToSignIn />;
@@ -55,21 +48,10 @@ export default function DashboardPage() {
   // Loading state
   if (!isLoaded || loading) {
     return (
-      <div style={{
-        minHeight: "100vh", background: "var(--bg-primary)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
-          color: "var(--text-secondary)",
-        }}>
-          <div style={{
-            width: 40, height: 40, border: "3px solid var(--border)",
-            borderTopColor: "var(--accent)", borderRadius: "50%",
-            animation: "spin 0.8s linear infinite",
-          }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          <span style={{ fontSize: "0.9rem" }}>Loading your workspace…</span>
+      <div className="auth-container">
+        <div className="flex flex-col items-center gap-4 text-[var(--text-secondary)]">
+          <div className="w-10 h-10 border-4 border-[var(--border)] border-t-[var(--accent)] rounded-full animate-spin" />
+          <span className="text-sm">Loading your workspace…</span>
         </div>
       </div>
     );
@@ -98,57 +80,26 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-primary)", position: "relative" }}>
+    <div className="page-container">
       <div className="mesh-bg" />
 
-      <div style={{ position: "relative", zIndex: 1 }}>
+      <div className="content-wrapper">
         {/* TOP NAV */}
-        <header style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 32px",
-          background: "rgba(15,15,19,0.85)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid var(--border)",
-          position: "sticky", top: 0, zIndex: 50,
-        }}>
-          <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
+        <header className="dashboard-header">
+          <span className="text-[1.2rem] font-bold text-[var(--text-primary)] tracking-tight">
             ✦ Studify
           </span>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div className="flex items-center gap-3.5">
             {/* Avatar */}
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%",
-              background: "var(--accent)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontWeight: 700, fontSize: "0.85rem", color: "#fff",
-              overflow: "hidden",
-            }}>
+            <div className="dashboard-avatar">
               {displayUser.image
-                ? <img src={displayUser.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ? <img src={displayUser.image} alt="" className="w-full h-full object-cover" />
                 : initials}
             </div>
 
             <SignOutButton redirectUrl="/">
-              <button style={{
-                padding: "8px 16px",
-                background: "transparent",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                color: "var(--text-secondary)",
-                cursor: "pointer",
-                fontSize: "0.85rem",
-                transition: "all 0.2s",
-              }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.2)";
-                  (e.target as HTMLButtonElement).style.color = "var(--text-primary)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLButtonElement).style.borderColor = "var(--border)";
-                  (e.target as HTMLButtonElement).style.color = "var(--text-secondary)";
-                }}
-              >
+              <button className="btn-secondary py-2 px-4 text-sm rounded-lg hover:text-[var(--text-primary)] hover:border-white/20">
                 Sign Out
               </button>
             </SignOutButton>
@@ -156,60 +107,46 @@ export default function DashboardPage() {
         </header>
 
         {/* MAIN */}
-        <main style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
+        <main className="dashboard-main">
 
           {/* Welcome banner */}
-          <div className="glass" style={{ padding: "28px 32px", marginBottom: 32 }}>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: 6 }}>
+          <div className="glass dashboard-welcome">
+            <p className="text-[var(--text-secondary)] text-sm mb-1.5">
               Welcome back 👋
             </p>
-            <h1 style={{ fontSize: "1.8rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>
+            <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-1">
               {displayUser.name}
             </h1>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            <p className="text-[var(--text-secondary)] text-sm">
               {displayUser.email}
             </p>
           </div>
 
           {/* Stats */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-            gap: 16, marginBottom: 32,
-          }}>
+          <div className="dashboard-stats-grid">
             {stats.map((s) => (
-              <div key={s.label} className="glass" style={{ padding: "20px 24px" }}>
-                <div style={{ fontSize: "1.5rem", marginBottom: 10 }}>{s.icon}</div>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--text-primary)" }}>{s.value}</div>
-                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 4 }}>{s.label}</div>
+              <div key={s.label} className="glass dashboard-stat-card">
+                <div className="text-2xl mb-2.5">{s.icon}</div>
+                <div className="text-[1.6rem] font-bold text-[var(--text-primary)]">{s.value}</div>
+                <div className="text-xs text-[var(--text-secondary)] mt-1">{s.label}</div>
               </div>
             ))}
           </div>
 
           {/* Account details */}
-          <div className="glass" style={{ padding: "28px 32px" }}>
-            <h2 style={{ fontWeight: 700, marginBottom: 20, color: "var(--text-primary)", fontSize: "1rem" }}>
+          <div className="glass dashboard-account">
+            <h2 className="font-bold mb-5 text-[var(--text-primary)] text-base">
               Account Details
             </h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div className="flex flex-col gap-3.5">
               {[
                 { label: "MongoDB ID", value: displayUser._id || "—", mono: true },
                 { label: "Clerk ID", value: clerkUser?.id ?? "—", mono: true },
                 { label: "Member since", value: new Date(displayUser.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }), mono: false },
               ].map(({ label, value, mono }) => (
-                <div key={label} style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "12px 0", borderBottom: "1px solid var(--border)",
-                }}>
-                  <span style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>{label}</span>
-                  <span style={{
-                    fontSize: mono ? "0.75rem" : "0.875rem",
-                    fontFamily: mono ? "monospace" : "inherit",
-                    color: "var(--text-primary)",
-                    maxWidth: "60%", overflow: "hidden",
-                    textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    textAlign: "right",
-                  }}>
+                <div key={label} className="dashboard-account-row">
+                  <span className="text-sm text-[var(--text-secondary)]">{label}</span>
+                  <span className={`text-${mono ? "xs" : "sm"} ${mono ? "font-mono" : "font-sans"} text-[var(--text-primary)] max-w-[60%] overflow-hidden text-ellipsis whitespace-nowrap text-right`}>
                     {value}
                   </span>
                 </div>
