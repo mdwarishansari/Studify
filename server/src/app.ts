@@ -6,8 +6,18 @@ import userRoutes from "./routes/user.routes.js";
 const app = express();
 
 // ─── Core Middleware ──────────────────────────────────────────────
+// In development, allow all origins (covers Expo tunnel + Next.js).
+// In production, restrict to CLIENT_URL.
+const allowedOrigins = [
+  process.env.CLIENT_URL || "http://localhost:3000",
+  "http://localhost:3000",
+  "http://localhost:8081",
+];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  origin: process.env.NODE_ENV === "production"
+    ? allowedOrigins
+    : true, // allow all in dev — Expo tunnel has dynamic URLs
   credentials: true,
 }));
 app.use(express.json());
